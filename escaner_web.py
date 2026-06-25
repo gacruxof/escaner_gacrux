@@ -4,7 +4,7 @@ import mysql.connector
 app = Flask(__name__)
 
 # ==========================================
-# INTERFAZ WEB PROFESIONAL (Basada en Gacrux Principal)
+# INTERFAZ WEB PROFESIONAL (Auto-Arranque)
 # ==========================================
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -13,7 +13,6 @@ HTML_PAGE = """
     <meta charset="UTF-8">
     <title>Gacrux Scanner</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-    <!-- Usamos la librería pura para tener control total de la interfaz -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         :root {
@@ -21,7 +20,6 @@ HTML_PAGE = """
             --bg-card: #1e1e24;
             --primary: #1e3a8a;
             --success: #2e7d32;
-            --danger: #7f1d1d;
             --text: #ffffff;
         }
         body { 
@@ -35,7 +33,7 @@ HTML_PAGE = """
             align-items: center; 
             height: 100vh;
             box-sizing: border-box;
-            overflow: hidden; /* Evita que la pantalla se deslice */
+            overflow: hidden; 
         }
         h2 { margin: 5px 0 15px 0; color: #89b4fa; letter-spacing: 1px; text-transform: uppercase; font-size: 1.5rem;}
         
@@ -60,20 +58,12 @@ HTML_PAGE = """
         .btn { 
             width: 100%; padding: 15px; font-size: 1.1rem; font-weight: bold; color: white; 
             border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; 
-            margin-bottom: 10px;
         }
-        .btn-start { background: var(--primary); }
-        .btn-start:active { background: #1d4ed8; }
-        
-        /* Contenedor de la cámara */
-        #contenedor-lector { display: none; width: 100%; }
-        #reader { width: 100%; border-radius: 6px; overflow: hidden; border: 2px solid var(--primary); background: black; margin-bottom: 15px; }
-        
-        /* Controles cuando la cámara está activa */
-        .camera-controls { display: flex; gap: 10px; width: 100%; }
-        .btn-close { background: var(--danger); width: 35%; padding: 15px 0; font-size: 1rem;}
-        .btn-scan { background: var(--success); flex-grow: 1; }
+        .btn-scan { background: var(--success); transition: background 0.2s; }
+        .btn-scan:active { transform: scale(0.98); }
         .btn-scanning { background: #d08c00 !important; }
+
+        #reader { width: 100%; border-radius: 6px; overflow: hidden; border: 2px solid var(--primary); background: black; margin-bottom: 15px; }
 
         #status { 
             margin-top: 15px; font-weight: bold; color: #888; font-size: 0.95rem; 
@@ -97,17 +87,12 @@ HTML_PAGE = """
             </select>
         </div>
 
-        <button id="btn-encender" class="btn btn-start" onclick="encenderCamara()">ENCENDER CÁMARA</button>
-
-        <div id="contenedor-lector">
-            <div id="reader"></div>
-            <div class="camera-controls">
-                <button class="btn btn-close" onclick="apagarCamara()">CERRAR</button>
-                <button id="btn-disparar" class="btn btn-scan" onclick="activarDisparo()">ESCANEAR</button>
-            </div>
-        </div>
+        <!-- El visor de la cámara siempre visible -->
+        <div id="reader"></div>
         
-        <div id="status">Sistema en espera.</div>
+        <button id="btn-disparar" class="btn btn-scan" onclick="activarDisparo()">ESCANEAR</button>
+        
+        <div id="status">Conectando cámara...</div>
     </div>
 
     <script>
@@ -176,18 +161,9 @@ HTML_PAGE = """
         let html5QrCode = null;
         let scannerActivo = false;
 
-        function encenderCamara() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            
-            document.getElementById('btn-encender').style.display = 'none';
-            document.getElementById('div-sonidos').style.display = 'none';
-            document.getElementById('contenedor-lector').style.display = 'block';
-            document.getElementById('status').innerText = "Cámara lista. Presiona ESCANEAR para leer.";
-            document.getElementById('status').style.color = "#888";
-            
+        // Iniciar la cámara en cuanto cargue la página web
+        window.onload = () => {
             html5QrCode = new Html5Qrcode("reader");
-            
-            // Configuración optimizada para celular
             const config = { fps: 15, qrbox: { width: 250, height: 100 } };
             
             html5QrCode.start({ facingMode: "environment" }, config, 
@@ -224,16 +200,19 @@ HTML_PAGE = """
                         });
                     }
                 },
-                (errorMessage) => { /* Ignorar errores de no lectura por frame */ }
-            ).catch(err => {
-                alert("Error al iniciar la cámara. Revisa los permisos.");
-                apagarCamara();
+                (errorMessage) => { /* Ignorar errores normales de lectura por frame */ }
+            ).then(() => {
+                document.getElementById('status').innerText = "Cámara lista. Presiona ESCANEAR.";
+                document.getElementById('status').style.color = "#888";
+            }).catch(err => {
+                document.getElementById('status').innerText = "Error: Da permisos de cámara y recarga.";
+                document.getElementById('status').style.color = "#ff4a4a";
             });
-        }
+        };
 
         function activarDisparo() {
             if (!html5QrCode) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (audioCtx.state === 'suspended') audioCtx.resume(); // Habilita el sonido en iOS/Android
             scannerActivo = true;
             
             const btnDisparar = document.getElementById('btn-disparar');
@@ -241,19 +220,6 @@ HTML_PAGE = """
             btnDisparar.classList.add("btn-scanning");
             document.getElementById('status').innerText = "Acerca el código a la cámara...";
             document.getElementById('status').style.color = "#89b4fa";
-        }
-
-        function apagarCamara() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    document.getElementById('contenedor-lector').style.display = 'none';
-                    document.getElementById('btn-encender').style.display = 'block';
-                    document.getElementById('div-sonidos').style.display = 'block';
-                    document.getElementById('status').innerText = "Sistema en espera.";
-                    document.getElementById('status').style.color = "#888";
-                    scannerActivo = false;
-                }).catch(err => {});
-            }
         }
     </script>
 </body>
